@@ -18,6 +18,17 @@ import (
 )
 
 const defaultAPIBase = "https://api.fastly.com"
+const maxResponseBodySize = 64 * 1024
+
+var (
+	errResponseBodyTooLarge = errors.New("response body too large")
+	responseBodyPool        = sync.Pool{
+		New: func() any {
+			b := make([]byte, 0, 1024)
+			return &b
+		},
+	}
+)
 
 type Config struct {
 	APIKey      string
@@ -209,7 +220,10 @@ func (c *Client) doOnce(ctx context.Context, method, path string, body []byte, c
 		return err
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	respBodyBuf := acquireResponseBody()
+	defer releaseResponseBody(respBodyBuf)
+	respBody, err := readResponseBody(resp.Body, resp.ContentLength, maxResponseBodySize, *respBodyBuf)
+	*respBodyBuf = respBody
 	if err != nil {
 		return err
 	}
@@ -239,6 +253,80 @@ func trimBody(b []byte) string {
 		return s[:512]
 	}
 	return s
+}
+
+func acquireResponseBody() *[]byte {
+	b := responseBodyPool.Get().(*[]byte)
+	*b = (*b)[:0]
+	return b
+}
+
+func releaseResponseBody(b *[]byte) {
+	if cap(*b) <= maxResponseBodySize {
+		responseBodyPool.Put(b)
+	}
+}
+
+func readResponseBody(r io.Reader, contentLength int64, maxBodySize int, dst []byte) ([]byte, error) {
+	if maxBodySize > 0 && contentLength > int64(maxBodySize) {
+		return dst, errResponseBodyTooLarge
+	}
+	dst = dst[:0]
+	if contentLength == 0 {
+		return dst, nil
+	}
+	if contentLength > 0 {
+		n := int(contentLength)
+		if cap(dst) < n {
+			dst = make([]byte, n)
+		} else {
+			dst = dst[:n]
+		}
+		_, err := io.ReadFull(r, dst)
+		return dst, err
+	}
+	if cap(dst) == 0 {
+		dst = make([]byte, 0, 1024)
+	}
+	for {
+		if maxBodySize > 0 && len(dst) == maxBodySize {
+			var b [1]byte
+			n, err := r.Read(b[:])
+			if n > 0 {
+				return dst, errResponseBodyTooLarge
+			}
+			if errors.Is(err, io.EOF) {
+				return dst, nil
+			}
+			if err != nil {
+				return dst, err
+			}
+			return dst, errors.New("response body read returned (0, nil)")
+		}
+		if len(dst) == cap(dst) {
+			n := 2 * cap(dst)
+			if n == 0 {
+				n = 1024
+			}
+			if maxBodySize > 0 && n > maxBodySize {
+				n = maxBodySize
+			}
+			b := make([]byte, len(dst), n)
+			copy(b, dst)
+			dst = b
+		}
+		n, err := r.Read(dst[len(dst):cap(dst)])
+		dst = dst[:len(dst)+n]
+		if errors.Is(err, io.EOF) {
+			return dst, nil
+		}
+		if err != nil {
+			return dst, err
+		}
+		if n == 0 {
+			return dst, errors.New("response body read returned (0, nil)")
+		}
+	}
 }
 
 type service struct {

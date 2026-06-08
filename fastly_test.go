@@ -2,10 +2,12 @@ package natfy
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -102,5 +104,12 @@ func TestUpdateSkipsUnchangedBackend(t *testing.T) {
 	}
 	if clones.Load() != 0 {
 		t.Fatalf("clone called %d times", clones.Load())
+	}
+}
+
+func TestReadResponseBodyTooLarge(t *testing.T) {
+	_, err := readResponseBody(strings.NewReader(strings.Repeat("x", maxResponseBodySize+1)), -1, maxResponseBodySize, nil)
+	if !errors.Is(err, errResponseBodyTooLarge) {
+		t.Fatalf("got %v; want %v", err, errResponseBodyTooLarge)
 	}
 }
