@@ -108,7 +108,7 @@ func TestUpdateSkipsUnchangedBackend(t *testing.T) {
 }
 
 func TestReadResponseBodyTooLarge(t *testing.T) {
-	_, err := readResponseBody(strings.NewReader(strings.Repeat("x", maxResponseBodySize+1)), -1, maxResponseBodySize, nil)
+	_, err := readResponseBody(strings.NewReader(strings.Repeat("x", maxResponseBodySize+1)), -1, maxResponseBodySize)
 	if !errors.Is(err, errResponseBodyTooLarge) {
 		t.Fatalf("got %v; want %v", err, errResponseBodyTooLarge)
 	}

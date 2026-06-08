@@ -22,12 +22,6 @@ const maxResponseBodySize = 64 * 1024
 
 var (
 	errResponseBodyTooLarge = errors.New("response body too large")
-	responseBodyPool        = sync.Pool{
-		New: func() any {
-			b := make([]byte, 0, 1024)
-			return &b
-		},
-	}
 )
 
 type Config struct {
@@ -220,10 +214,7 @@ func (c *Client) doOnce(ctx context.Context, method, path string, body []byte, c
 		return err
 	}
 	defer resp.Body.Close()
-	respBodyBuf := acquireResponseBody()
-	defer releaseResponseBody(respBodyBuf)
-	respBody, err := readResponseBody(resp.Body, resp.ContentLength, maxResponseBodySize, *respBodyBuf)
-	*respBodyBuf = respBody
+	respBody, err := readResponseBody(resp.Body, resp.ContentLength, maxResponseBodySize)
 	if err != nil {
 		return err
 	}
@@ -255,39 +246,20 @@ func trimBody(b []byte) string {
 	return s
 }
 
-func acquireResponseBody() *[]byte {
-	b := responseBodyPool.Get().(*[]byte)
-	*b = (*b)[:0]
-	return b
-}
-
-func releaseResponseBody(b *[]byte) {
-	if cap(*b) <= maxResponseBodySize {
-		responseBodyPool.Put(b)
-	}
-}
-
-func readResponseBody(r io.Reader, contentLength int64, maxBodySize int, dst []byte) ([]byte, error) {
+func readResponseBody(r io.Reader, contentLength int64, maxBodySize int) ([]byte, error) {
+	var dst []byte
 	if maxBodySize > 0 && contentLength > int64(maxBodySize) {
 		return dst, errResponseBodyTooLarge
 	}
-	dst = dst[:0]
 	if contentLength == 0 {
 		return dst, nil
 	}
 	if contentLength > 0 {
-		n := int(contentLength)
-		if cap(dst) < n {
-			dst = make([]byte, n)
-		} else {
-			dst = dst[:n]
-		}
+		dst = make([]byte, int(contentLength))
 		_, err := io.ReadFull(r, dst)
 		return dst, err
 	}
-	if cap(dst) == 0 {
-		dst = make([]byte, 0, 1024)
-	}
+	dst = make([]byte, 0, 1024)
 	for {
 		if maxBodySize > 0 && len(dst) == maxBodySize {
 			var b [1]byte
