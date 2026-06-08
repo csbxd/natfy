@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/csbxd/natnet"
@@ -36,12 +35,9 @@ type Config struct {
 }
 
 type Client struct {
-	cfg Config
-	hc  *http.Client
-
-	mu     sync.Mutex
-	synced bool
-	last   natnet.Addr
+	cfg  Config
+	hc   *http.Client
+	last natnet.Addr
 }
 
 func New(cfg Config) *Client {
@@ -63,21 +59,15 @@ func New(cfg Config) *Client {
 }
 
 func (c *Client) Sync(ctx context.Context, addr natnet.Addr) error {
-	c.mu.Lock()
-	if c.synced && c.last == addr {
-		c.mu.Unlock()
+	if c.last == addr {
 		return nil
 	}
-	c.mu.Unlock()
 
 	if err := c.Update(ctx, addr); err != nil {
 		return err
 	}
 
-	c.mu.Lock()
-	c.synced = true
 	c.last = addr
-	c.mu.Unlock()
 	return nil
 }
 
