@@ -1,0 +1,4 @@
+github.com/csbxd/natnet v0.0.0-20260608174025-87aaf1d849e5 h1:qw7s2qXd5GEO0KMpn6m7JDvd3oVc8BLKcDHTE2al71o=
+github.com/csbxd/natnet v0.0.0-20260608174025-87aaf1d849e5/go.mod h1:GdYEidA6IeSe3GxlumBxqlD3AYtUVnX29J0PR4o59WE=
+golang.org/x/sys v0.36.0 h1:KVRy2GtZBrk1cBYA7MKu5bEZFxQk4NIDV6RLVcC8o0k=
+golang.org/x/sys v0.36.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
